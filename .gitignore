@@ -1,0 +1,14 @@
+/target
+**/*.rs.bk
+*.pdb
+Cargo.lock
+.DS_Store
+*.swp
+STATUS.md
+
+
+# Added by cargo
+#
+# already existing elements were commented out
+
+#/target
