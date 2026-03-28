@@ -1,6 +1,19 @@
 use anyhow::Result;
 use colored::Colorize;
-use dialoguer::{theme::ColorfulTheme, Confirm, Input, Select};
+use dialoguer::{theme::ColorfulTheme, Confirm, Select};
+
+use rustyline::error::ReadlineError;
+
+fn get_rustyline_input(prompt: &str) -> String {
+    let mut rl = rustyline::DefaultEditor::new().unwrap();
+    match rl.readline(prompt) {
+        Ok(line) => line,
+        Err(_) => {
+            std::process::exit(1);
+        }
+    }
+}
+
 use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 use std::sync::{Arc, Mutex};
@@ -80,7 +93,7 @@ fn select_derivation_path(chain: &Chain) -> Result<DerivationPath> {
     match selection {
         0 => Ok(DerivationPath::Standard), 1 => Ok(DerivationPath::SegWitP2SH),
         2 => Ok(DerivationPath::SegWitNative), 3 => {
-            let custom_path = Input::<String>::with_theme(&theme).with_prompt("Enter custom path").interact()?;
+            let custom_path = get_rustyline_input("? Enter custom path: ");
             Ok(DerivationPath::Custom(custom_path))
         },
         _ => Ok(DerivationPath::Standard),
@@ -100,11 +113,11 @@ fn get_verification_mode() -> Result<(Option<String>, bool, Option<String>)> {
     let selection = Select::with_theme(&theme).with_prompt("Select Verification Mode").items(&items).default(0).interact()?;
     match selection {
         0 => {
-            let target = Input::<String>::with_theme(&theme).with_prompt("Enter target address").interact()?;
+            let target = get_rustyline_input("? Enter target address: ");
             Ok((Some(target.to_lowercase()), false, None))
         }
         1 => {
-            let rpc = Input::<String>::with_theme(&theme).with_prompt("Enter RPC URL").interact()?;
+            let rpc = get_rustyline_input("? Enter RPC URL: ");
             Ok((None, true, Some(rpc)))
         }
         _ => Ok((None, false, None)),
@@ -133,10 +146,9 @@ fn get_seed_phrase(length: usize) -> Result<(Vec<String>, usize, Vec<Vec<usize>>
     let prompt = format!("Paste your seed phrase (omit missing words OR use ? for known missing positions)\nExpected: {} words", length);
     
     println!("\n{}", prompt.cyan().bold());
-    println!("{}", "(Paste your phrase and press Enter)".truecolor(150, 150, 150));
-    
-    let mut input = String::new();
-    std::io::stdin().read_line(&mut input)?;
+    println!("{}", "(Use Left/Right Arrows or Backspace to edit if needed)".truecolor(150, 150, 150));
+    let mut input = get_rustyline_input("> ");
+    input.push('\n');
     
     let clean_input: String = input.chars().map(|c| {
         if c.is_ascii_alphabetic() || c == '?' { c.to_ascii_lowercase() } else { ' ' }
