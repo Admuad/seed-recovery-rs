@@ -130,11 +130,19 @@ fn generate_combinations(n: usize, k: usize) -> Vec<Vec<usize>> {
 }
 
 fn get_seed_phrase(length: usize) -> Result<(Vec<String>, usize, Vec<Vec<usize>>)> {
-    let theme = ColorfulTheme::default();
     let prompt = format!("Paste your seed phrase (omit missing words OR use ? for known missing positions)\nExpected: {} words", length);
     
-    let input = Input::<String>::with_theme(&theme).with_prompt(&prompt).interact()?;
-    let words: Vec<&str> = input.trim().split_whitespace().collect();
+    println!("\n{}", prompt.cyan().bold());
+    println!("{}", "(Paste your phrase and press Enter)".truecolor(150, 150, 150));
+    
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input)?;
+    
+    let clean_input: String = input.chars().map(|c| {
+        if c.is_ascii_alphabetic() || c == '?' { c.to_ascii_lowercase() } else { ' ' }
+    }).collect();
+    
+    let words: Vec<&str> = clean_input.split_whitespace().collect();
     
     let has_question_marks = words.iter().any(|&w| w == "?");
     
@@ -156,7 +164,7 @@ fn get_seed_phrase(length: usize) -> Result<(Vec<String>, usize, Vec<Vec<usize>>
         let missing_count = diff as usize;
         let known_words: Vec<String> = words.iter().map(|s| s.to_string()).collect();
         let combos = generate_combinations(length, missing_count);
-        println!("{} {} missing words detected! Auto-testing all {} positional combinations...", "ZUNXBT OUTCLASS:".green().bold(), missing_count, combos.len().to_string().yellow());
+        println!("{} {} missing words detected! Auto-testing all {} positional combinations...", "UNKNOWN POSITION DISCOVERY:".green().bold(), missing_count, combos.len().to_string().yellow());
         
         return Ok((known_words, missing_count, combos));
     }
