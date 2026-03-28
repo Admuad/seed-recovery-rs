@@ -34,8 +34,8 @@ struct RecoveryState {
 fn print_header() {
     println!("{}", "\n╔════════════════════════════════════════════════════════════╗".cyan().bold());
     println!("{}", "║  🔑 SEED PHRASE RECOVERY TOOL v0.4.0 🔑                     ║".cyan().bold());
-    println!("{}", "║  Outclasses ZUNXBT via Unknown Position Bruteforcing       ║".cyan().bold());
-    println!("{}", "║  Real-Time Rust Speedometer & Absolute Exact Derivations   ║".cyan().bold());
+    println!("{}", "║  Unknown Position Bruteforcing Support                     ║".cyan().bold());
+    println!("{}", "║  Real-Time Rust Speedometer & Network-Exact Derivations    ║".cyan().bold());
     println!("{}", "╚════════════════════════════════════════════════════════════╝\n".cyan().bold());
 }
 

@@ -73,30 +73,45 @@ fn hmac_sha512(key: &[u8], data: &[u8]) -> [u8; 64] {
 
 /// Helper: BIP32 derive child key
 fn bip32_derive(parent_key: &[u8], index: u32, hardened: bool) -> Vec<u8> {
-    let mut data = vec![0u8; 1 + 4];
+    let mut data = vec![];
+    let actual_index = if hardened { index + 0x80000000 } else { index };
+    
     if hardened {
-        data[0] = 0x00;
-    }
-    data[1..5].copy_from_slice(&index.to_be_bytes());
-    if hardened {
+        data.push(0x00);
         data.extend_from_slice(&parent_key[0..32]);
     } else {
-        data.extend_from_slice(&parent_key[33..65]);
+        // secp256k1 non-hardened uses public key
+        use k256::ecdsa::SigningKey;
+        if let Ok(private_key) = SigningKey::from_slice(&parent_key[0..32]) {
+            use k256::elliptic_curve::sec1::ToEncodedPoint;
+            let pubkey_bytes = private_key.verifying_key().to_encoded_point(true);
+            data.extend_from_slice(pubkey_bytes.as_bytes());
+        } else {
+            // Ed25519 requires hardened paths per SLIP-0010, fallback to avoid panic
+            data.push(0x00);
+            data.extend_from_slice(&parent_key[0..32]);
+        }
     }
+    data.extend_from_slice(&actual_index.to_be_bytes());
 
     let i = hmac_sha512(&parent_key[32..64], &data);
     let il = &i[0..32];
-    let ir = &i[32..64];
-    let _ir = ir; // Unused for now
-
-    let mut il_num = [0u8; 33];
-    il_num[0] = 0;
-    il_num[1..].copy_from_slice(il);
-
-    let mut child_key = hmac_sha512(il, &il_num);
-    child_key[0] ^= parent_key[0];
-
-    child_key.to_vec()
+    
+    let mut child_key = vec![0u8; 64];
+    
+    // Provide true derivation using k256 scalar addition for proper BIP32 
+    use k256::elliptic_curve::ops::Reduce;
+    use k256::U256;
+    let il_uint = U256::from_be_slice(il);
+    let parent_uint = U256::from_be_slice(&parent_key[0..32]);
+    let il_scalar = k256::Scalar::reduce(il_uint);
+    let parent_scalar = k256::Scalar::reduce(parent_uint);
+    let child_scalar = parent_scalar + il_scalar;
+    
+    child_key[0..32].copy_from_slice(&child_scalar.to_bytes());
+    child_key[32..64].copy_from_slice(&i[32..64]); // New chain code
+    
+    child_key
 }
 
 /// EVM address derivation using k256
