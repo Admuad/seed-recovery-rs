@@ -2,6 +2,7 @@ use anyhow::{Result, anyhow};
 use reqwest::blocking::Client;
 use serde_json::Value;
 use std::time::Duration;
+use crate::chains;
 
 /// Check balance via RPC for different chains
 pub fn check_balance(rpc_url: &str, address: &str, chain_type: chains::ChainType) -> Result<Option<String>> {

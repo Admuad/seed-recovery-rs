@@ -59,7 +59,7 @@ impl DerivationPath {
 
 /// Address derivation trait with derivation path support
 pub trait DeriveAddress {
-    fn derive_address(&self, seed: &bip39::Mnemonic, path: &DerivationPath) -> Result<String>;
+    fn derive_address(&self, seed: &bip39::Mnemonic, path: &DerivationPath, coin_type: u32) -> Result<String>;
 }
 
 /// Helper: HMAC-SHA512 for BIP32 derivation
@@ -103,7 +103,7 @@ fn bip32_derive(parent_key: &[u8], index: u32, hardened: bool) -> Vec<u8> {
 pub struct EvmDeriver;
 
 impl DeriveAddress for EvmDeriver {
-    fn derive_address(&self, seed: &bip39::Mnemonic, path: &DerivationPath) -> Result<String> {
+    fn derive_address(&self, seed: &bip39::Mnemonic, path: &DerivationPath, _coin_type: u32) -> Result<String> {
         let phrase: String = seed.words().collect::<Vec<_>>().join(" ");
 
         // Generate seed from mnemonic
@@ -113,7 +113,7 @@ impl DeriveAddress for EvmDeriver {
 
         // Parse derivation path
         let purpose = path.purpose();
-        let coin_type = 60; // EVM coin type
+        let coin_type = _coin_type;
 
         // BIP32 derivation: m/purpose'/coin_type'/account'/change/address_index
         let master = &seed_bytes[..64];
@@ -153,7 +153,7 @@ impl DeriveAddress for EvmDeriver {
 pub struct SolanaDeriver;
 
 impl DeriveAddress for SolanaDeriver {
-    fn derive_address(&self, seed: &bip39::Mnemonic, path: &DerivationPath) -> Result<String> {
+    fn derive_address(&self, seed: &bip39::Mnemonic, path: &DerivationPath, _coin_type: u32) -> Result<String> {
         let phrase: String = seed.words().collect::<Vec<_>>().join(" ");
 
         // Generate seed from mnemonic
@@ -188,7 +188,7 @@ impl DeriveAddress for SolanaDeriver {
 pub struct SuiDeriver;
 
 impl DeriveAddress for SuiDeriver {
-    fn derive_address(&self, seed: &bip39::Mnemonic, path: &DerivationPath) -> Result<String> {
+    fn derive_address(&self, seed: &bip39::Mnemonic, path: &DerivationPath, _coin_type: u32) -> Result<String> {
         let phrase: String = seed.words().collect::<Vec<_>>().join(" ");
 
         // Generate seed from mnemonic
@@ -224,7 +224,7 @@ impl DeriveAddress for SuiDeriver {
 pub struct AptosDeriver;
 
 impl DeriveAddress for AptosDeriver {
-    fn derive_address(&self, seed: &bip39::Mnemonic, path: &DerivationPath) -> Result<String> {
+    fn derive_address(&self, seed: &bip39::Mnemonic, path: &DerivationPath, _coin_type: u32) -> Result<String> {
         let phrase: String = seed.words().collect::<Vec<_>>().join(" ");
 
         // Generate seed from mnemonic
@@ -253,6 +253,93 @@ impl DeriveAddress for AptosDeriver {
         // Aptos address: hex-encoded Ed25519 public key (32 bytes) with 0x prefix
         let pubkey_bytes = verifying_key.to_bytes();
         Ok(format!("0x{}", hex::encode(pubkey_bytes)))
+    }
+}
+
+
+/// Tron address derivation (Base58Check with 0x41 prefix)
+pub struct TronDeriver;
+
+impl DeriveAddress for TronDeriver {
+    fn derive_address(&self, seed: &bip39::Mnemonic, path: &DerivationPath, _coin_type: u32) -> Result<String> {
+        let phrase: String = seed.words().collect::<Vec<_>>().join(" ");
+        let mut hasher = Sha512::new();
+        hasher.update(phrase.as_bytes());
+        let seed_bytes = hasher.finalize();
+
+        let purpose = path.purpose();
+        let coin_type = _coin_type;
+        let master = &seed_bytes[..64];
+        let purpose_key = bip32_derive(master, purpose, true);
+        let coin_key = bip32_derive(&purpose_key, coin_type, true);
+        let account_key = bip32_derive(&coin_key, 0, true);
+        let change_key = bip32_derive(&account_key, 0, false);
+        let index_key = bip32_derive(&change_key, 0, false);
+
+        let signing_key = EvmSigningKey::from_slice(&index_key[..32])
+            .map_err(|e| anyhow!("Failed to create signing key: {}", e))?;
+        let verifying_key = signing_key.verifying_key();
+        
+        use k256::elliptic_curve::sec1::ToEncodedPoint;
+        let encoded_point = verifying_key.to_encoded_point(false);
+        let pubkey_bytes = encoded_point.as_bytes();
+        let pubkey_no_prefix = &pubkey_bytes[1..];
+        
+        use sha3::{Digest as Sha3Digest, Keccak256};
+        let mut hasher = Keccak256::new();
+        hasher.update(pubkey_no_prefix);
+        let hash = hasher.finalize();
+        
+        let mut address_bytes = vec![0x41]; // 'T' prefix for Tron
+        address_bytes.extend_from_slice(&hash[hash.len() - 20..]);
+        
+        // Base58Check encode
+        Ok(bs58::encode(address_bytes).with_check().into_string())
+    }
+}
+
+/// Dogecoin address derivation (Base58Check with 0x1E prefix)
+pub struct DogecoinDeriver;
+
+impl DeriveAddress for DogecoinDeriver {
+    fn derive_address(&self, seed: &bip39::Mnemonic, path: &DerivationPath, _coin_type: u32) -> Result<String> {
+        let phrase: String = seed.words().collect::<Vec<_>>().join(" ");
+        let mut hasher = Sha512::new();
+        hasher.update(phrase.as_bytes());
+        let seed_bytes = hasher.finalize();
+
+        let purpose = path.purpose();
+        let coin_type = _coin_type;
+        let master = &seed_bytes[..64];
+        let purpose_key = bip32_derive(master, purpose, true);
+        let coin_key = bip32_derive(&purpose_key, coin_type, true);
+        let account_key = bip32_derive(&coin_key, 0, true);
+        let change_key = bip32_derive(&account_key, 0, false);
+        let index_key = bip32_derive(&change_key, 0, false);
+
+        let signing_key = EvmSigningKey::from_slice(&index_key[..32])
+            .map_err(|e| anyhow!("Failed to create signing key: {}", e))?;
+        let verifying_key = signing_key.verifying_key();
+        
+        use k256::elliptic_curve::sec1::ToEncodedPoint;
+        let encoded_point = verifying_key.to_encoded_point(true); // compressed
+        
+        // SHA256 then RIPEMD160
+        let mut hasher = sha2::Sha256::new();
+        hasher.update(encoded_point.as_bytes());
+        let sha256_hash = hasher.finalize();
+        
+        use hmac::Mac; // Just forcing trait in scope
+        use ripemd::Ripemd160;
+        let mut rip_hasher = Ripemd160::new();
+        rip_hasher.update(&sha256_hash);
+        let rip_hash = rip_hasher.finalize();
+        
+        let mut address_bytes = vec![0x1E]; // 'D' prefix for Dogecoin
+        address_bytes.extend_from_slice(&rip_hash);
+        
+        // Base58Check encode
+        Ok(bs58::encode(address_bytes).with_check().into_string())
     }
 }
 
@@ -327,7 +414,7 @@ impl Chain {
                 icon: "🔺",
                 derivation_path: "m/44'/195'/0'/0/0",
                 coin_type: 195,
-                deriver: Box::new(EvmDeriver), // Tron uses ECDSA like EVM
+                deriver: Box::new(TronDeriver),
             },
             ChainType::Dogecoin => Chain {
                 chain_type,
@@ -335,13 +422,13 @@ impl Chain {
                 icon: "🐕",
                 derivation_path: "m/44'/3'/0'/0/0",
                 coin_type: 3,
-                deriver: Box::new(EvmDeriver), // DOGE uses ECDSA
+                deriver: Box::new(DogecoinDeriver),
             },
         }
     }
 
     pub fn derive_address(&self, seed: &bip39::Mnemonic, path: &DerivationPath) -> Result<String> {
-        self.deriver.derive_address(seed, path)
+        self.deriver.derive_address(seed, path, self.coin_type)
     }
     
     /// Get available derivation paths for this chain
